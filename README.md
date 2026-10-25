@@ -196,3 +196,16 @@ More detail: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (transpiler and runtim
 The porting code (`tools/`, `runtime/`, `web/`, `scripts/`, `build_web.sh`, `.github/`, `docs/`) is
 released under the [MIT License](LICENSE). The original game source in `src/` and the game data
 remain under their owners' terms — see [NOTICE.md](NOTICE.md).
+
+## Donation
+
+To support this porting project, you can donate:
+
+| Koin | Jaringan | Alamat |
+|---|---|---|
+| BTC | Bitcoin | `1455F5BFc41XKc1Tjg8himciuiZXtHdrsz` |
+| ETH | Ethereum (ERC-20) | `0x411bd0C7a9A18d5A66B79F8C8c9D2b214D4A8214` |
+| BNB | BNB Smart Chain (BEP-20) | `0x411bd0C7a9A18d5A66B79F8C8c9D2b214D4A8214` |
+| USDT | ERC-20 / BEP-20 | `0x411bd0C7a9A18d5A66B79F8C8c9D2b214D4A8214` |
+
+Details and QR code: [DONATE.md](DONATE.md)
