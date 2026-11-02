@@ -27,25 +27,25 @@ fi
 rm -rf "$OUT"; mkdir -p "$OUT" "$GEN"
 
 echo "== 1. Blitz -> C++"
-python3 "$HERE/tools/bb2cpp.py" "$HERE/src/mh.bb" "$GEN/mh.cpp"
+python3 "$HERE/tools/bb2cpp.py" "$HERE/src/mh.bb" "$GEN/mh.cpp" "$HERE"/runtime/decls/*.decls
 
 DATA_FLAGS=""
 if [ -z "$CODE_ONLY" ]; then
   echo "== 2. assets"
-  python3 "$HERE/tools/prep_assets.py" "$GAME_DIR" "$GEN/assets"
+  python3 "$HERE/tools/prep_assets.py" "$GAME_DIR" "$GEN/assets" "$HERE/config"
   DATA_FLAGS="--preload-file $GEN/assets@/assets"
   LZ4="-sLZ4"   # game data compressed with LZ4 (~3x smaller download, unpacked on demand)
 fi
 
 echo "== 3. compile (WebAssembly)"
 if [ -n "$DEBUG" ]; then OPT="-O1 -g -sASSERTIONS=2"; else OPT="-O2"; fi
-CXXFLAGS="-std=c++17 $OPT -fwrapv -w -I$HERE/runtime"
+CXXFLAGS="-std=c++17 $OPT -fwrapv -ffp-contract=off -w -I$HERE/runtime"
 # ASYNCIFY flattens every function that can sleep; with the game functions inlined into
 # bb_main() that becomes one 400 KB function and the link never finishes (or the browser
 # rejects it: "local count too large"). Not inlining mh.cpp keeps the link at about a minute.
 MHFLAGS=""; [ "$ASYNC" = "jspi" ] || MHFLAGS="-fno-inline-functions"
 PIDS=""
-for f in "$GEN/mh.cpp" "$HERE/runtime/bbrt.cpp" "$HERE/runtime/mh_glue.cpp" "$HERE/runtime/web_main.cpp"; do
+for f in "$GEN/mh.cpp" "$HERE/runtime/bbrt.cpp" "$HERE/runtime/mh_glue.cpp" "$HERE/runtime/web_main.cpp" "$HERE"/runtime/net/*.cpp; do
   X=""; [ "$(basename "$f")" = "mh.cpp" ] && X="$MHFLAGS"
   em++ $CXXFLAGS $X -c "$f" -o "$GEN/$(basename "${f%.cpp}").o" & PIDS="$PIDS $!"
 done
@@ -53,12 +53,12 @@ for p in $PIDS; do wait $p || { echo "compile failed"; exit 1; }; done
 
 echo "== 4. link (${ASYNC:-asyncify})"
 if [ "$ASYNC" = "jspi" ]; then ASYNC_FLAGS="-sJSPI"; else ASYNC_FLAGS="-sASYNCIFY -sASYNCIFY_STACK_SIZE=262144"; fi
-em++ $OPT "$GEN/mh.o" "$GEN/bbrt.o" "$GEN/mh_glue.o" "$GEN/web_main.o" -o "$OUT/index.html" \
+em++ $OPT "$GEN/mh.o" "$GEN/bbrt.o" "$GEN/mh_glue.o" "$GEN/web_main.o" "$GEN"/net*.o -o "$OUT/index.html" \
   --shell-file "$HERE/web/shell.html" $DATA_FLAGS \
   $ASYNC_FLAGS -sSTACK_SIZE=2097152 \
   -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=134217728 \
   -sFORCE_FILESYSTEM -lidbfs.js -sENVIRONMENT=web \
-  -sEXPORTED_FUNCTIONS=_main,_web_key,_web_vbutton,_web_touch,_web_touch_cancel,_web_mouse,_web_set_overlay \
+  -sEXPORTED_FUNCTIONS=_main,_web_key,_web_vbutton,_web_pad,_web_touch,_web_touch_cancel,_web_mouse,_web_set_overlay \
   -sEXPORTED_RUNTIME_METHODS=callMain,FS,IDBFS,addRunDependency,removeRunDependency \
   -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 $LZ4
 # give the generated files a nicer name than index.*

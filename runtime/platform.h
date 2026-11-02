@@ -23,7 +23,8 @@ void rt_key(int scancode, bool down);                   // DirectInput scancodes
 void rt_touch(int id, float nx, float ny, int action);  // nx,ny in 0..1 of the screen; 0=down 1=move 2=up
 void rt_touch_cancel_all();
 void rt_mouse(float nx, float ny, int button, bool down);  // desktop mouse (web); button 0 = move
-void rt_vbutton(int vb, bool down);                    // VB_* from a physical pad
+void rt_vbutton(int vb, bool down);                    // VB_* from the first physical pad (player 1)
+int rt_pad(int device, int vb, bool down);              // VB_* from pad "device": 1st pad = P1, 2nd = P2...; returns the player
 void rt_audio_mix(int16_t *out, int frames);             // stereo, 44100 Hz
 void rt_joy_axis(int port, float x, float y);
 void rt_joy_button(int port, int button, bool down);    // button 1..n
@@ -34,3 +35,4 @@ enum { VB_UP, VB_DOWN, VB_LEFT, VB_RIGHT, VB_SHOT, VB_SPECIAL, VB_JUMP, VB_BLOCK
 int glue_player_code(int vb);     // key scancode (or joystick button) configured for player 1
 int glue_player_uses_joy();       // 1 if player 1 uses a joystick, port in glue_player_port()
 int glue_player_port();
+int glue_cheat_unlocked();       // 1 once the game's unlock-all cheat is active (cheat(1))

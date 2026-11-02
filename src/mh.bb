@@ -479,6 +479,8 @@ Include "menus.bb"	;includes
 Include "mh2.bb"
 Include "moves1.bb"
 Include "moves2.bb"	
+Include "online.bb"	;[android port] multiplayer online lobby
+Include "port.bb"	;[android port] touch / multi-pad input, adventure cheats
 
 loadData()  ;Loads general maps data
 
@@ -634,7 +636,7 @@ Repeat 	;--------Menus loop-------------------------
 WaitTimer(frameTimer)
 Cls
 
-If menuOption=2 Or menuOption=3 Or menuOption=4 Then
+If menuOption=2 Or menuOption=3 Or menuOption=4 Or menuOption=6 Then
 	DrawImage backg1,0,0
 	DrawImage title,24,24
 	fontType=2
@@ -649,6 +651,7 @@ If KeyHit(1) Then
   If menuOption = 1 Then menuOption = 2
   If menuOption = 3 Then menuOption = 2
   If menuOption = 4 Then menuOption = 3 : savekeys()
+  If menuOption = 6 Then onlineBack()	;[android port]
 EndIf
 
 Select menuOption
@@ -656,6 +659,7 @@ Select menuOption
 	Case 2: mainMenu()  ;main menu, first screen
 	Case 3: optionsMenu()   ;Options menu
 	Case 4: controlsMenu()   ;Controls menu
+	Case 6: onlineMenu()   ;[android port] multiplayer online lobby (online.bb)
 End Select
 
 If warning=1 Then
@@ -996,6 +1000,7 @@ Else
 	makechunk(0,330,-30,2,2)
 EndIf
 FlushKeys() : FlushJoy()
+If netPlay Then npBegin()	;[android port] online match: same seed and start state on every phone
 
 ;------*-------*-------------------*--------*--------
 ;------*-------*--- MAIN LOOP -----*--------*--------
@@ -1672,6 +1677,7 @@ If renderDelay Then Delay 50
 
 
 
+If netPlay Then npOverlay()	;[android port]
 rendert=rendert+1
 Select renderFreq
 Case 1
@@ -1780,7 +1786,13 @@ If mapRestart=1 Then
 	Goto restartMap
 EndIf
 
-If menuOption=2 Then menuOption=2 Else menuOption = 1
+If netPlay Then	;[android port] online match over: back to the online lobby
+	npFinish() : menuOption = 6
+ElseIf menuOption=2 Then
+	menuOption=2
+Else
+	menuOption = 1
+EndIf
 Goto menuStart
 End
 ;---------- check what characters are open ---------------
@@ -2283,6 +2295,7 @@ End Function
 ;--------KEY INPUTS-----------------------------------------------------------------------------------
 Function Getinput()
 
+portFrame()	;[android port]
 For n= 1 To zzamount
 	zoldx(n)=zx(n):zoldy(n)=zy(n)
 Next
@@ -2292,7 +2305,9 @@ For n=1 To zzamount
 	rightKeyhit(n)=0:leftKeyHit(n)=0
 	If zBlocked(n) Then zBlock(n)=1:zBlow(n)=1 Else zblock(n)=0
 Next
-If KeyHit(1) Then   ;pause button
+escHit=KeyHit(1)
+If escHit And netPlay Then npEscape() 	;[android port] online: ESC twice leaves the match
+If escHit And netPlay=0 Then   ;pause button
 	gamePaused=1 : menuOption=5
 	delay(100)
 	flushkeys() : flushmouse() : flushjoy()
@@ -2369,10 +2384,13 @@ Case 1
 	If blockKey(n)=1 And specialKey(n)=1 Then superKey(n)=1
 	
 End Select
+portActions(n)	;[android port] touch controls / this player's game pad
 EndIf
 Next
 
 EndIf
+
+If netPlay Then npSync()	;[android port] online match: exchange buttons, every player gets theirs
 
 For n = 1 To zzamount
 If zon(n)=0 Then Goto noshot

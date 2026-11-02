@@ -133,6 +133,7 @@ CloseFile file
 End Function 
 ;------------------- Start menu For vs stage Select ---------------------------------
 Function vsSelectMap()
+If netPlay Then curMap=npMap : gameStart=1 : Return	;[android port] online: the host chose the stage
 
 ClsColor 0,0,100
 Color 200,200,200   ;For the white rectangles around thumbnails
@@ -372,6 +373,7 @@ Repeat
     If JoyHit(shotK(n),controllerPort(n)) Or JoyHit(specialK(n),controllerPort(n)) Then pressed=1
   End Select
  Next
+ If portAnyPress() Then pressed=1	;[android port] touch / game pads
 Delay(10)
 Until pressed=1
 flushkeys() : flushjoy()
@@ -924,6 +926,7 @@ End Function
 Function mainMenu()
 
 pointers
+PortScreen(1)	;[android port] lets the touch overlay show the UNLOCK ALL button
 
 If KeyHit(14) Then  ;BACKSPACE key
 	cheatSeq(1)=cheatSeq(1)+1
@@ -936,6 +939,13 @@ If KeyHit(28) Then  ;ENTER key
         For n=4 To characterAmount ;unlock all playable characters
             characterOpen(n)=1
 	    Next
+		;[android port] also open every adventure and CTF map that exists in the current mod
+		For n=1 To maxAmap
+			If FileType(modFolder$(curModId) + "amap" + n + ".dat")=1 And FileType(modFolder$(curModId) + "amap_" + n + ".jpg")=1 Then mapOpen(n)=1
+		Next
+		For n=1 To maxCTFMap
+			If FileType(modFolder$(curModId) + "CTFmap" + n + ".dat")=1 And FileType(modFolder$(curModId) + "CTFmap_" + n + ".jpg")=1 Then CTFmapOpen(n)=1
+		Next
 	EndIf
 	For n=1 To 30
 		vsMapOpen(n)=1
@@ -948,9 +958,10 @@ If clickedBut(n) Then
   Select n
 	Case 1: menuOption=1:vsMode=0 :defineButtons(1)
 	Case 2: menuOption=1:vsMode=1      ;go to character Select screen (vs mode)
-	Case 3: menuOption=3 			   ;go to options screen
-	Case 4: rollCredits()
-	Case 5: saveConfig() : end
+	Case 3: menuOption=6			   ;[android port] multiplayer online lobby
+	Case 4: menuOption=3 			   ;go to options screen
+	Case 5: rollCredits()
+	Case 6: saveConfig() : end
   End Select
 	If gamesound Then PlaySound ddhitsnd
 EndIf
@@ -958,17 +969,18 @@ Next
 
 ;----------Buttons attributes--------------------------
 x=0 : y=0
-buttonAmount = 5
-For b= 1 To 5
-	xBut(b)=200+x:yBut(b)=200+y:wBut(b)=240:hBut(b)=22
+buttonAmount = 6	;[android port] was 5, + multiplayer online
+For b= 1 To 6
+	xBut(b)=180+x:yBut(b)=195+y:wBut(b)=280:hBut(b)=22
 	y=y+30
 Next
 
 butText$(1)=strInfo$(14)
 butText$(2)=strInfo$(21)
-butText$(3)=strInfo$(15)
-butText$(4)=strInfo$(40)
-butText$(5)=strInfo$(50)
+butText$(3)="multiplayer online"	;[android port]
+butText$(4)=strInfo$(15)
+butText$(5)=strInfo$(40)
+butText$(6)=strInfo$(50)
 
 ;-----Rendering menu --------------------------------
 fontType=1
@@ -1437,6 +1449,7 @@ Case 1
 	If JoyHit(shotK(n),controllerPort(n)) Then shotKey(n)=1
 
 End Select
+portPointerActions(n)	;[android port] this player's game pad
 Next
 
 pve=5
@@ -1631,15 +1644,15 @@ color 28,28,28
 rect x,y,220,20,1
 
 Select keyschosen
-Case 1:pri x,y,strInfo$(51): flip:upK(pn)=getTheKey(controllerPort(pn))
-Case 2:pri x,y,strInfo$(52): flip:downK(pn)=getTheKey(controllerPort(pn))
-Case 3:pri x,y,strInfo$(53): flip:leftK(pn)=getTheKey(controllerPort(pn))
-Case 4:pri x,y,strInfo$(54): flip:rightK(pn)=getTheKey(controllerPort(pn))
-Case 5:pri x,y,strInfo$(55): flip:shotK(pn)=getTheKey(controllerPort(pn))
-Case 6:pri x,y,strInfo$(56): flip:specialK(pn)=getTheKey(controllerPort(pn))
-Case 7:pri x,y,strInfo$(57): flip:jumpK(pn)=getTheKey(controllerPort(pn))
-Case 8:pri x,y,strInfo$(58): flip:blockK(pn)=getTheKey(controllerPort(pn))
-Case 9:pri x,y,strInfo$(59): flip:grabK(pn)=getTheKey(controllerPort(pn))
+Case 1:pri x,y,strInfo$(51): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then upK(pn)=k	;[android port] ESC keeps the old key
+Case 2:pri x,y,strInfo$(52): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then downK(pn)=k	;[android port] ESC keeps the old key
+Case 3:pri x,y,strInfo$(53): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then leftK(pn)=k	;[android port] ESC keeps the old key
+Case 4:pri x,y,strInfo$(54): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then rightK(pn)=k	;[android port] ESC keeps the old key
+Case 5:pri x,y,strInfo$(55): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then shotK(pn)=k	;[android port] ESC keeps the old key
+Case 6:pri x,y,strInfo$(56): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then specialK(pn)=k	;[android port] ESC keeps the old key
+Case 7:pri x,y,strInfo$(57): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then jumpK(pn)=k	;[android port] ESC keeps the old key
+Case 8:pri x,y,strInfo$(58): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then blockK(pn)=k	;[android port] ESC keeps the old key
+Case 9:pri x,y,strInfo$(59): flip:k=getTheKey(controllerPort(pn)) : If k > 0 Then grabK(pn)=k	;[android port] ESC keeps the old key
 
 End Select
 

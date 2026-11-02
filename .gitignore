@@ -1,0 +1,6 @@
+# build output (contains the game data - not redistributable here)
+/build/
+__pycache__/
+*.pyc
+# private online settings
+/config/online.local.cfg
