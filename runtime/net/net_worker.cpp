@@ -22,9 +22,18 @@
 // message per frame (54/s), so game messages are queued and sent together every 40 ms through
 // a token bucket that stays under the limit.
 //
-// Rooms are joined by code: CREATE ROOM makes a new random code, the room list shows
-// "enter room code..." and the rooms used recently; the web page shows the code with a
-// "copy invite link" button (index.html?room=CODE joins that room directly).
+// Rooms: four public rooms with fixed codes (PUBLIC1-4) are always in the room list; CREATE ROOM
+// makes a private room with a random code ("enter room code" + recent rooms in the list, the page
+// shows the code with a "copy invite link" button, index.html?room=CODE joins it directly).
+//
+// Public room list / online count without help from the server: while the room list is shown,
+// one public room is "probed" every ~2.5 s - a short WebSocket that reads the welcome (who is in
+// the room) and the "hi" every player sends when somebody joins (names, ready), then closes
+// (< 1 s). Players only show sockets that sent "hi", so probes are invisible in the room. A probe
+// also sends {t:ready} before closing: the server starts a match only when every socket is ready
+// and checks that only when a ready arrives, so a probe that drops in while a match is starting
+// must not block it (the start message then lists the probe, which everybody ignores).
+// "Online" = players in the public rooms (private rooms cannot be counted).
 #include "net.h"
 
 #ifndef __EMSCRIPTEN__
@@ -129,6 +138,58 @@ EM_JS(void, js_net_ui, (int mode, const char *code, const char *name), {
   if (Module.mhNetUi) Module.mhNetUi(mode, UTF8ToString(code), UTF8ToString(name));
 });
 EM_JS(void, js_net_ask_code, (), { if (Module.mhNetAskCode) Module.mhNetAskCode(); });
+// look into a public room for a moment: result "Q CODE ok players host ready ping" / "Q CODE fail"
+// (full or playing: the server refuses the socket) / "Q CODE skip" (page hidden)
+EM_JS(void, js_probe, (const char *url, const char *code, int waitMs), {
+  var N = Module.mhNet || (Module.mhNet = {q: [], uq: []});
+  var c = UTF8ToString(code), u = UTF8ToString(url);
+  if (document.hidden) { N.uq.push('Q\t' + c + '\tskip'); return; }
+  var bad = new RegExp('[\t\r\n]', 'g');
+  var clean = function (s) { return String(s == null ? '' : s).replace(bad, ' '); };
+  var ws, done = false, me = '', players = [], names = {}, rdy = {}, timer = 0, t0 = 0, rtt = -1;
+  var finish = function (ok) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    try { ws.onclose = null; ws.close(1000, 'probe'); } catch (e) {}
+    if (!ok) { N.uq.push('Q\t' + c + '\tfail'); return; }
+    var host = '', hs = 99, nr = 0, n = 0;
+    players.forEach(function (p) {
+      if (names[p.id] === undefined) return;
+      n++;
+      if (rdy[p.id]) nr++;
+      if (p.slot < hs) { hs = p.slot; host = names[p.id]; }
+    });
+    N.uq.push(['Q', c, 'ok', n, clean(host).slice(0, 16), nr, rtt].join('\t'));
+  };
+  try { ws = new WebSocket(u); } catch (e) { N.uq.push('Q\t' + c + '\tfail'); return; }
+  timer = setTimeout(function () { finish(false); }, 6000);
+  ws.onerror = function () {};
+  ws.onclose = function () { finish(false); };
+  ws.onmessage = function (e) {
+    if (typeof e.data !== 'string') return;
+    var allIn = function () { return players.every(function (p) { return names[p.id] !== undefined; }); };
+    if (e.data === 'pong') {                    /* answered by the room itself: real ping */
+      rtt = Math.round(performance.now() - t0);
+      if (allIn()) finish(true);
+      return;
+    }
+    var o;
+    try { o = JSON.parse(e.data); } catch (x) { return; }
+    if (!o) return;
+    if (o.t === 'welcome') {
+      me = o.id;
+      players = (o.players || []).filter(function (p) { return p.id !== me; });
+      try { ws.send(JSON.stringify({t: 'ready'})); t0 = performance.now(); ws.send('ping'); } catch (x) {}
+      clearTimeout(timer);
+      timer = setTimeout(function () { finish(true); }, waitMs);
+    } else if (o.t === 'msg' && o.d && o.d.k === 'hi') {
+      names[o.from] = clean(o.d.n || 'player');
+      rdy[o.from] = !!o.d.r;
+      if (allIn() && rtt >= 0) finish(true);
+    }
+  };
+});
 
 namespace {
 
@@ -138,6 +199,15 @@ const double TOKENS_PER_MS = 25.0 / 1000.0;
 const double TOKENS_MAX = 20;
 const size_t PACKET_MAX = 480;         // server limit is 512 characters
 const int64_t START_TIMEOUT_MS = 12000;
+const char *PUBLIC_CODES[] = {"PUBLIC1", "PUBLIC2", "PUBLIC3", "PUBLIC4"};
+const int PUBLIC_N = 4;
+const int PROBE_WAIT_MS = 900;          // how long a probe waits for the players' names
+const int64_t PROBE_EVERY_MS = 2500;    // one public room after the other: each one every 10 s
+
+int public_index(const std::string &code) {
+  for (int i = 0; i < PUBLIC_N; i++) if (code == PUBLIC_CODES[i]) return i;
+  return -1;
+}
 
 // after a match the lobby opens again: rejoin the same room for the next round
 std::string g_rejoin_code;
@@ -179,7 +249,7 @@ std::string clean_code(const std::string &in) {
 class NetWorker : public NetBackend {
  public:
   ~NetWorker() override { disconnect(); }
-  const char *name() const override { return "cloudflare"; }
+  const char *name() const override { return "Server 1"; }
   bool supportsHeroes() const override { return true; }
 
   void connect() override {
@@ -198,7 +268,10 @@ class NetWorker : public NetBackend {
     rng_.seed(rd() ^ (uint32_t)std::chrono::steady_clock::now().time_since_epoch().count());
     if (g_last_hero) myHero = g_last_hero;
     state = NET_ONLINE;
-    onlineCount = -1;              // the server cannot count players outside rooms
+    onlineCount = -1;              // known after the public rooms were probed
+    probeBusy_ = false;
+    nextProbe_ = 0;
+    sweep_ = PUBLIC_N;             // look into every public room right away
     lastError.clear();
     loadRecent();
     buildRooms();
@@ -254,6 +327,14 @@ class NetWorker : public NetBackend {
       js_http_ping((httpBase_ + "/").c_str());
       nextHttpPing_ = now + (httpPings_ == 0 ? 700 : 4000);
     }
+    if (state == NET_ONLINE && !probeBusy_ && now >= nextProbe_) {
+      const char *c = PUBLIC_CODES[probeIdx_];
+      probeIdx_ = (probeIdx_ + 1) % PUBLIC_N;
+      js_probe((wsBase_ + "/room/" + c).c_str(), c, PROBE_WAIT_MS);
+      probeBusy_ = true;
+      probeStarted_ = now;
+    }
+    if (probeBusy_ && now - probeStarted_ > 8000) probeBusy_ = false;   // lost result
 
     if (state == NET_STARTING) {
       if (started_ && now >= countdownEndMs) state = NET_IN_MATCH;
@@ -276,6 +357,8 @@ class NetWorker : public NetBackend {
     loadRecent();
     buildRooms();
     nextHttpPing_ = 0;
+    sweep_ = PUBLIC_N;
+    nextProbe_ = 0;
   }
 
   void createRoom(const std::string &, int) override {
@@ -349,6 +432,14 @@ class NetWorker : public NetBackend {
   std::vector<std::pair<std::string, std::string>> recent_;   // code, host name
   int uiMode_ = -1;
   int httpPings_ = 0;
+  // sockets in my room that did not say "hi" yet (players still loading, or probes): not shown
+  std::map<std::string, int> pending_;
+  struct PubRoom { int players = -1, ready = 0, ping = -1; bool open = true; std::string host; };
+  PubRoom pub_[PUBLIC_N];
+  bool probeBusy_ = false;
+  int probeIdx_ = 0, sweep_ = 0;
+  int64_t nextProbe_ = 0, probeStarted_ = 0;
+  bool wsPinged_ = false;             // a probe measured the ping: better than the HTTP one
   std::string uiCode_, uiName_;
 
   // ---------------------------------------------------------------- rooms / page
@@ -364,6 +455,7 @@ class NetWorker : public NetBackend {
     bb_closefile(f);
   }
   void saveRecent(const std::string &code, const std::string &host) {
+    if (public_index(code) >= 0) return;          // always in the list anyway
     loadRecent();
     recent_.erase(std::remove_if(recent_.begin(), recent_.end(),
                                  [&](const std::pair<std::string, std::string> &r) { return r.first == code; }),
@@ -377,6 +469,22 @@ class NetWorker : public NetBackend {
   }
   void buildRooms() {
     rooms.clear();
+    int online = -1;
+    for (int i = 0; i < PUBLIC_N; i++) {
+      const PubRoom &pr = pub_[i];
+      NetRoom n;
+      n.id = PUBLIC_CODES[i];
+      n.name = "public room " + std::to_string(i + 1);
+      n.maxPlayers = pr.players >= 0 ? 4 : 0;   // 0 = not known yet (not shown)
+      n.players = pr.players < 0 ? 0 : pr.players;
+      n.open = pr.open && n.players < 4;
+      n.host = pr.players < 0 ? "checking..." : !pr.open ? (pr.players < 4 ? "playing" : pr.host)
+               : pr.players == 0 ? "empty" : pr.host;
+      n.ping = pr.ping >= 0 ? pr.ping : ping;
+      rooms.push_back(n);
+      if (pr.players >= 0) online = (online < 0 ? 0 : online) + pr.players;
+    }
+    if (!inRoom()) onlineCount = online;
     NetRoom ask;
     ask.id = "?";
     ask.name = "enter room code";
@@ -418,27 +526,44 @@ class NetWorker : public NetBackend {
           if (fh) { bb_writeline(fh, nm); bb_closefile(fh); }
           if (sock_ && inRoom()) sendHello();
         }
+      } else if (f[0] == "Q" && f.size() > 2) {    // public room probe
+        probeBusy_ = false;
+        nextProbe_ = now + (sweep_ > 0 ? 300 : PROBE_EVERY_MS);
+        if (sweep_ > 0) sweep_--;
+        int i = public_index(f[1]);
+        if (i >= 0 && f[2] == "ok") {
+          pub_[i].players = f.size() > 3 ? atoi(f[3].c_str()) : 0;
+          pub_[i].host = f.size() > 4 ? f[4] : std::string();
+          pub_[i].ready = f.size() > 5 ? atoi(f[5].c_str()) : 0;
+          pub_[i].open = true;
+          int rt = f.size() > 6 ? atoi(f[6].c_str()) : -1;
+          if (rt >= 0) { pub_[i].ping = rt; ping = rt; wsPinged_ = true; }   // WebSocket ping to the room
+        } else if (i >= 0 && f[2] == "fail") {
+          pub_[i].open = false;                  // full or a match is running (count kept)
+          if (pub_[i].players < 0) pub_[i].players = 0;
+        }
+        if (state == NET_ONLINE) buildRooms();
       } else if (f[0] == "T" && f.size() > 1) {    // HTTP round trip
         int p = atoi(f[1].c_str());
         // the first request also opens the TLS connection: it is much slower, skip it
-        if (p >= 0 && !inRoom() && httpPings_++ > 0) ping = p;
+        if (p >= 0 && !inRoom() && httpPings_++ > 0 && !wsPinged_) ping = p;
       }
     }
-    (void)now;
   }
 
   // ---------------------------------------------------------------- socket
   void open(const std::string &code) {
     resetRoom();
     roomId = code;
-    roomName = "room " + code;
+    int pi = public_index(code);
+    roomName = pi >= 0 ? "public room " + std::to_string(pi + 1) : "room " + code;
     js_ws_open((wsBase_ + "/room/" + code).c_str());
     sock_ = true;
     joining_ = true;
     state = NET_CONNECTING;
   }
   void resetRoom() {
-    myId_.clear(); hostId_.clear(); slotOf_.clear();
+    myId_.clear(); hostId_.clear(); slotOf_.clear(); pending_.clear();
     started_ = false; readySent_ = false; joining_ = false;
     matchMap = 0; matchLives = 3; matchSeed = 0;
     tokens_ = TOKENS_MAX;
@@ -479,8 +604,14 @@ class NetWorker : public NetBackend {
     std::stable_sort(members.begin(), members.end(), [&](const NetMember &a, const NetMember &b) {
       return slotOf_[a.id] < slotOf_[b.id];
     });
+    // host = the shown player with the lowest server slot. The server's own "host" is not used:
+    // it only tells a newcomer (and counts probes), so two players could both think they host
+    // after a probe took a free low slot. This rule gives the same host on every screen.
+    bool wasHost = isHost();
+    hostId_ = members.empty() ? std::string() : members.front().id;
     for (auto &m : members) m.host = m.id == hostId_;
     onlineCount = (int)members.size();
+    if (!wasHost && isHost() && state == NET_IN_ROOM && sock_) sendRoom();   // I became the host
   }
   // ping shown for another player: round trip through the relay (their ping + mine), which
   // is also what NetPlayDelay() needs to choose the input delay
@@ -495,12 +626,13 @@ class NetWorker : public NetBackend {
     auto I = [&](size_t i) { return i < f.size() ? atoi(f[i].c_str()) : 0; };
     if (k == "W") {                               // welcome: I am in the room
       myId_ = S(1);
-      hostId_ = S(3);
       members.clear();
       slotOf_.clear();
       for (auto &p : split(S(4), ',')) {
         auto q = split(p, ':');
-        if (q.size() >= 2 && !q[0].empty()) addMember(q[0], atoi(q[1].c_str()));
+        if (q.size() < 2 || q[0].empty()) continue;
+        if (q[0] == myId_) addMember(q[0], atoi(q[1].c_str()));
+        else pending_[q[0]] = atoi(q[1].c_str());  // shown once they send "hi"
       }
       joining_ = false;
       wantJoin_.clear();
@@ -511,7 +643,7 @@ class NetWorker : public NetBackend {
       if (isHost()) sendRoom();
       saveRecent(roomId, isHost() ? playerName : std::string());
     } else if (k == "J") {
-      addMember(S(1), I(2));
+      pending_[S(1)] = I(2);
       sendHello();                                // so the new player learns my name
       if (isHost()) {
         sendRoom();
@@ -523,11 +655,10 @@ class NetWorker : public NetBackend {
       members.erase(std::remove_if(members.begin(), members.end(), [&](const NetMember &m) { return m.id == id; }),
                     members.end());
       slotOf_.erase(id);
+      pending_.erase(id);
       sortMembers();
-    } else if (k == "H") {
-      hostId_ = S(1);
+    } else if (k == "H") {                        // server's host: see sortMembers()
       sortMembers();
-      if (isHost()) sendRoom();
     } else if (k == "S") {                        // the server started the match
       matchSeed = (uint32_t)strtoul(S(1).c_str(), nullptr, 10);
       std::vector<NetMember> keep;
@@ -544,6 +675,11 @@ class NetWorker : public NetBackend {
       if (state != NET_STARTING) beginGo(now);
       saveRecent(roomId, hostName());
     } else if (k == "I") {                        // somebody's name / character / ready / ping
+      auto pend = pending_.find(S(1));
+      if (pend != pending_.end() && state != NET_IN_MATCH) {
+        addMember(pend->first, pend->second);
+        pending_.erase(pend);
+      }
       if (NetMember *m = member(S(1))) {
         if (!m->me) {
           m->name = S(2).empty() ? "player" : S(2);

@@ -1,6 +1,19 @@
 # Changelog
 
-## 1.3.0 – 2026-11-04
+The web version now uses the same version number as the
+[Android port](https://github.com/richardyusan/multihero-android) (1.7.0).
+
+## 1.7.0 – 2026-11-04
+- **Public rooms**: PUBLIC ROOM 1-4 are always in the room list with players (x/4), host name,
+  ping and "playing" while a match runs; **Online** shows how many players are in the public rooms.
+  Works with the current server: the game looks into one public room every ~2.5 s for under a
+  second (invisible to the players in the room).
+- The online server is called **Server 1** in the lobby.
+- Ping in the room list is measured to the room itself (WebSocket), not with an HTTP request.
+- Players that have not sent their name yet are not shown in a room.
+- New screenshots (menu, character select, online lobby and room, gameplay, phone).
+
+## 1.3.0 – 2026-11-04 (web only, numbering before the switch to 1.7.0)
 - **Real online multiplayer in the browser** (was a demo lobby): rooms on the Cloudflare Worker
   [multihero-server](https://github.com/richardyusan/multihero-server), up to 4 players, lockstep netplay.
   New backend `runtime/net/net_worker.cpp`; `config/online.cfg` points to the server.

@@ -109,7 +109,7 @@ NetBackend *net_create_backend(const std::string &kindIn, std::string &note) {
   }
   if (kind == "worker" || kind == "cloudflare") {
     if (NetBackend *b = net_create_worker()) return b;
-    note = "cloudflare server needs the web version - using demo";
+    note = "server 1 (cloudflare) needs the web version - using demo";
     return net_create_demo();
   }
   if (kind == "relay") {

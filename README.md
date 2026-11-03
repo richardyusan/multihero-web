@@ -12,15 +12,18 @@ a tiny 2D runtime replaces Blitz, and Emscripten compiles everything to **WebAss
 engine, no plugins: one HTML page, one `.wasm` file and the game data.
 
 This is the browser version of the [MultiHero Android port](https://github.com/richardyusan/multihero-android);
-both share the same transpiler and runtime.
+both share the same transpiler and runtime. **Version 1.7.0** (same number as the Android port) –
+see [CHANGELOG.md](CHANGELOG.md).
 
 [![MultiHero in the browser](docs/screenshots/gameplay.png)](https://richardyusan.github.io/multihero-web/)
 
 | Menu | Character select |
 |---|---|
 | ![Main menu](docs/screenshots/menu.png) | ![Character select](docs/screenshots/select.png) |
-| **In game** | **Phone (touch controls)** |
-| ![Gameplay](docs/screenshots/gameplay.png) | ![Phone layout](docs/screenshots/phone.png) |
+| **Online: public rooms + players online** | **Online: in a room (ping, READY)** |
+| ![Online room list](docs/screenshots/online_lobby.png) | ![Online room](docs/screenshots/online_room.png) |
+| **Online match** | **Phone (touch controls)** |
+| ![Online match](docs/screenshots/online_match.png) | ![Phone layout](docs/screenshots/phone.png) |
 
 ## Features
 
@@ -30,7 +33,8 @@ both share the same transpiler and runtime.
   **gamepads** (Gamepad API) and **on-screen touch controls** on phones and tablets.
 - Sound through Web Audio (24 channels, 44.1 kHz).
 - Settings (`game.cfg`, `keys.cfg`) are saved in the browser (IndexedDB).
-- **Online multiplayer** for up to 4 players: rooms with a code and an invite link, player names,
+- **Online multiplayer** for up to 4 players: 4 public rooms with players, host and ping in the
+  room list, **players online** count, private rooms with a code and an invite link, player names,
   character / stage / lives choice, ping and READY in the room (see [below](#online-multiplayer)).
 - Full-screen button; phones go full screen in landscape when you press Play.
 - About 2 MB of code + 11 MB of game data (LZ4-compressed, 25 MB unpacked).
@@ -46,13 +50,16 @@ with a local web server (see [Play](#play) below).
 
 ## Online multiplayer
 
-1. **▶ Play** → **MULTIPLAYER ONLINE** → **CREATE ROOM**. The room gets a code, e.g. `KX4P7`.
-2. **📋 Copy invite link** (bar at the top of the page) and send it to your friends. They open the
-   link, press Play and MULTIPLAYER ONLINE and are in your room. Or they press **⌨ Join with code**.
+1. **▶ Play** → **MULTIPLAYER ONLINE**. The room list shows **PUBLIC ROOM 1–4** with players,
+   host and ping, and how many players are online. Click a public room twice (or JOIN ROOM) to play
+   with whoever is there.
+2. For a private game press **CREATE ROOM**: the room gets a code, e.g. `KX4P7`. **📋 Copy invite link**
+   (bar at the top of the page) and send it to your friends; they open the link, press Play and
+   MULTIPLAYER ONLINE and are in your room. Or they press **⌨ Join with code**.
 3. Pick your character, everybody presses **READY**, the host picks stage + lives and presses **START**.
 4. After the match everybody is back in the same room for the next round.
 
-Up to 4 players per room. Rooms are served by a Cloudflare Worker
+Up to 4 players per room. The server is shown as **Server 1** in the lobby. Rooms are served by a Cloudflare Worker
 ([richardyusan/multihero-server](https://github.com/richardyusan/multihero-server)); every browser runs
 the game itself and only the players' buttons travel over the network (lockstep), so all players see
 the same fight. Details, protocol and limits: [docs/ONLINE.md](docs/ONLINE.md).
@@ -197,8 +204,8 @@ More detail: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (transpiler and runtim
 ## Limitations
 
 - The level editor (`Editor.bb`) is not ported.
-- Online rooms are joined with a code or invite link; there is no public room list yet (the server
-  only knows room codes). Web and Android players cannot play together.
+- "Players online" counts the players in the public rooms; players in private (code) rooms cannot
+  be counted by the current server. Web and Android players cannot play together.
 - On iPhone/iPad, full screen and screen-rotation lock depend on Safari's support.
 - Tested in Chromium (desktop and phone-sized touch layout). Please report problems in other
   browsers in the Issues.

@@ -432,7 +432,10 @@ Else
 		olSmall(300,y+5,olCut$(NetRoomHost$(r),11),200,200,215)
 		If NetRoomMax(r) > 0 Then pri 452,y+5,NetRoomPlayers(r)+"/"+NetRoomMax(r)	;0 = unknown (rooms joined by code)
 		olPing(528,y+7,NetRoomPing(r))
-		If NetRoomOpen(r)=0 Then olBadge(392,y+5,40,16,140,40,40,"FULL")
+		If NetRoomOpen(r)=0 Then
+			;a room that is playing says so in the host column; FULL only when it is really full
+			If NetRoomMax(r) = 0 Or NetRoomPlayers(r) >= NetRoomMax(r) Then olBadge(392,y+5,40,16,140,40,40,"FULL")
+		EndIf
 	Next
 EndIf
 
