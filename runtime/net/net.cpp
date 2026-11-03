@@ -3,8 +3,11 @@
 // and backend selection.
 //
 // online.cfg (bundled with the assets, can be overridden by a copy in the app's data folder):
-//   backend = auto | demo | relay | eos     (auto: relay when "server" is set, otherwise demo)
-//   server  = my-vps.example.com            (relay backend)
+//   backend = auto | demo | relay | worker | eos
+//             auto: "worker" when "server" is a web address (https://...), "relay" for a
+//             plain host name, "demo" when no server is set
+//   server  = https://multihero-server.example.workers.dev   (worker backend, web build)
+//             my-vps.example.com                             (relay backend)
 //   port    = 7777
 //   name    = player name (default: random "player1234", remembered in online_name.txt)
 //   max_players = 4
@@ -23,6 +26,7 @@
 
 NetBackend *net_create_demo();
 NetBackend *net_create_relay();
+NetBackend *net_create_worker();  // nullptr outside the web build (needs the browser's WebSocket)
 NetBackend *net_create_eos();   // nullptr when built without MH_WITH_EOS
 
 static std::unique_ptr<NetBackend> g_net;
@@ -103,6 +107,11 @@ NetBackend *net_create_backend(const std::string &kindIn, std::string &note) {
     note = "epic sdk not built in - using demo";
     kind = "demo";
   }
+  if (kind == "worker" || kind == "cloudflare") {
+    if (NetBackend *b = net_create_worker()) return b;
+    note = "cloudflare server needs the web version - using demo";
+    return net_create_demo();
+  }
   if (kind == "relay") {
     if (NetBackend *b = net_create_relay()) return b;
     note = "vps relay not available on this platform - using demo";
@@ -119,7 +128,12 @@ int bb_netinit() {
   if (g_net) return 1;
   NetConfig cfg = load_config();
   std::string kind = bb_lower(cfg.get("backend", "auto"));
-  if (kind == "auto") kind = cfg.get("server").empty() ? "demo" : "relay";
+  if (kind == "auto") {
+    std::string srv = bb_lower(cfg.get("server"));
+    if (srv.empty()) kind = "demo";
+    else if (srv.compare(0, 4, "http") == 0 || srv.compare(0, 2, "ws") == 0) kind = "worker";
+    else kind = "relay";
+  }
   g_init_note.clear();
   g_net.reset(net_create_backend(kind, g_init_note));
   g_net->cfg = cfg;

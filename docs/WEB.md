@@ -45,6 +45,11 @@ To put it online, upload the five files to any static host (GitHub Pages, Netlif
 HTML5 game…). No special server headers are needed. Remember that the game data contains
 third-party characters (see `NOTICE.md`).
 
+## Online multiplayer
+
+MULTIPLAYER ONLINE in the main menu uses the Cloudflare Worker set in `config/online.cfg`
+(rooms with a code / invite link, up to 4 players). See [ONLINE.md](ONLINE.md).
+
 ## Controls
 
 | Keyboard (P1 default) | Gamepad | Touch | Action |

@@ -430,7 +430,7 @@ Else
 		fontType=1
 		pri 44,y+5,olCut$(olText$(NetRoomName$(r)),15)
 		olSmall(300,y+5,olCut$(NetRoomHost$(r),11),200,200,215)
-		pri 452,y+5,NetRoomPlayers(r)+"/"+NetRoomMax(r)
+		If NetRoomMax(r) > 0 Then pri 452,y+5,NetRoomPlayers(r)+"/"+NetRoomMax(r)	;0 = unknown (rooms joined by code)
 		olPing(528,y+7,NetRoomPing(r))
 		If NetRoomOpen(r)=0 Then olBadge(392,y+5,40,16,140,40,40,"FULL")
 	Next
@@ -706,7 +706,8 @@ If p >= 0 Then ps$ = p+" ms" Else ps$ = "-"
 olSmall(40,124,"Server: "+NetBackendName$(),200,200,215)
 olSmall(262,124,"Status: "+NetStatus$(),200,200,215)
 olSmall(408,124,"Ping: "+ps$,200,200,215)
-olSmall(510,124,"Online: "+NetOnlineCount(),200,200,215)
+If NetOnlineCount() >= 0 Then oc$ = NetOnlineCount() Else oc$ = "-"	;-1 = the server cannot count
+olSmall(510,124,"Online: "+oc$,200,200,215)
 End Function
 
 Function olPanel(x,y,w,h,r,g,b)

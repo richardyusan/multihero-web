@@ -4,7 +4,7 @@ Play **MultiHero 0.96**, the 2D multiplayer platform fighting game by **mhman**,
 
 <p align="center">
   <a href="https://richardyusan.github.io/multihero-web/"><b>▶&nbsp;&nbsp;PLAY NOW IN YOUR BROWSER</b></a><br>
-  <sub>Free, no install · keyboard, mouse, gamepad or touch · about 12 MB download</sub>
+  <sub>Free, no install · keyboard, mouse, gamepad or touch · online multiplayer · about 12 MB download</sub>
 </p>
 
 The original Blitz3D / Blitz BASIC source is kept **unchanged**. A small transpiler turns it into C++,
@@ -30,6 +30,8 @@ both share the same transpiler and runtime.
   **gamepads** (Gamepad API) and **on-screen touch controls** on phones and tablets.
 - Sound through Web Audio (24 channels, 44.1 kHz).
 - Settings (`game.cfg`, `keys.cfg`) are saved in the browser (IndexedDB).
+- **Online multiplayer** for up to 4 players: rooms with a code and an invite link, player names,
+  character / stage / lives choice, ping and READY in the room (see [below](#online-multiplayer)).
 - Full-screen button; phones go full screen in landscape when you press Play.
 - About 2 MB of code + 11 MB of game data (LZ4-compressed, 25 MB unpacked).
 
@@ -41,6 +43,19 @@ Pages from the [`docs/`](docs/) folder of this repository (`index.html`, `multih
 
 To play offline, download this repository (**Code → Download ZIP**), then open the `docs` folder
 with a local web server (see [Play](#play) below).
+
+## Online multiplayer
+
+1. **▶ Play** → **MULTIPLAYER ONLINE** → **CREATE ROOM**. The room gets a code, e.g. `KX4P7`.
+2. **📋 Copy invite link** (bar at the top of the page) and send it to your friends. They open the
+   link, press Play and MULTIPLAYER ONLINE and are in your room. Or they press **⌨ Join with code**.
+3. Pick your character, everybody presses **READY**, the host picks stage + lives and presses **START**.
+4. After the match everybody is back in the same room for the next round.
+
+Up to 4 players per room. Rooms are served by a Cloudflare Worker
+([richardyusan/multihero-server](https://github.com/richardyusan/multihero-server)); every browser runs
+the game itself and only the players' buttons travel over the network (lockstep), so all players see
+the same fight. Details, protocol and limits: [docs/ONLINE.md](docs/ONLINE.md).
 
 ## Game data
 
@@ -158,7 +173,9 @@ game data ──(tools/prep_assets.py)──────────────
   control back to the browser, which paints the frame, delivers input and plays sound, then the
   game continues.
 - **`web/shell.html`** – the page: canvas scaling (sharp pixels), keyboard/mouse/touch/gamepad,
-  Web Audio, saving to IndexedDB, loading screen.
+  Web Audio, saving to IndexedDB, loading screen, online bar (room code, invite link, name).
+- **`runtime/net/`** – online play: lobby functions and lockstep netplay (`net.cpp`, shared with
+  the Android port) and the Cloudflare Worker client (`net_worker.cpp`).
 
 More detail: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (transpiler and runtime) and
 [docs/WEB.md](docs/WEB.md) (browser backend).
@@ -169,7 +186,8 @@ More detail: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (transpiler and runtim
 |---|---|
 | `src/` | Original MultiHero 0.96 Blitz source by mhman (unchanged) |
 | `tools/` | `bb2cpp.py` transpiler, `prep_assets.py` asset preparation, font generator |
-| `runtime/` | Blitz 2D runtime, game glue, web backend, headless Linux test backend |
+| `runtime/` | Blitz 2D runtime, game glue, web backend, headless Linux test backend, `net/` online play |
+| `config/` | `online.cfg` – online server address (bundled with the game data) |
 | `web/` | Page template (`shell.html`), icon, `play_web.bat` |
 | `scripts/` | `test_linux.sh` – headless build + smoke test (no browser needed) |
 | `docs/` | The playable build for GitHub Pages (`index.html`, `.js`, `.wasm`, `.data`), docs, screenshots |
@@ -179,8 +197,8 @@ More detail: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (transpiler and runtim
 ## Limitations
 
 - The level editor (`Editor.bb`) is not ported.
-- A gamepad controls player 1 only. Other human players can share the keyboard with their own keys
-  from Options → Controls. There is no online play.
+- Online rooms are joined with a code or invite link; there is no public room list yet (the server
+  only knows room codes). Web and Android players cannot play together.
 - On iPhone/iPad, full screen and screen-rotation lock depend on Safari's support.
 - Tested in Chromium (desktop and phone-sized touch layout). Please report problems in other
   browsers in the Issues.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0 – 2026-11-04
+- **Real online multiplayer in the browser** (was a demo lobby): rooms on the Cloudflare Worker
+  [multihero-server](https://github.com/richardyusan/multihero-server), up to 4 players, lockstep netplay.
+  New backend `runtime/net/net_worker.cpp`; `config/online.cfg` points to the server.
+- CREATE ROOM makes a room code; bar on the page with **Copy invite link** (`?room=CODE` joins
+  directly), **Join with code** and the player name. Recent rooms in the room list.
+- Room: names, characters, READY, ping per player; the host picks stage and lives and starts.
+- Match inputs are packed into ~20 packets per second to stay under the server's 30 messages/s limit.
+- After a match everybody returns to the same room automatically.
+
 ## 1.2.0 – 2026-11-04
 Synced with the MultiHero Android port 1.7.0.
 - Main menu **CHEATS** page: INFINITE HEALTH, INFINITE JUTSU (Adventure mode) and UNLOCK ALL CHARACTERS + MAPS as
