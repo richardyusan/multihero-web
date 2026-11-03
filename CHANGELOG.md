@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 – 2026-11-04
+Synced with the MultiHero Android port 1.7.0.
+- Main menu **CHEATS** page: INFINITE HEALTH, INFINITE JUTSU (Adventure mode) and UNLOCK ALL CHARACTERS + MAPS as
+  ON/OFF items you can click with the mouse.
+- Multiplayer online menu: stage picker with pictures, player status with ping during a match, players who leave are
+  taken over by the CPU (online play in the browser is still the demo lobby).
+
 ## 1.1.0 – 2026-11-03
 Synced with the MultiHero Android port 1.6.0.
 - New on-screen buttons **UP+SP** (up + special) and **DN+SP** (down + special), next to THROW / JUTSU.
