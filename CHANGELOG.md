@@ -8,7 +8,11 @@ The web version now uses the same version number as the
   ping and "playing" while a match runs; **Online** shows how many players are in the public rooms.
   Works with the current server: the game looks into one public room every ~2.5 s for under a
   second (invisible to the players in the room).
-- The online server is called **Server 1** in the lobby.
+- **4 servers**: Server 1 Asia Tenggara, Server 2 Asia Timur, Server 3 US, Server 4 Eropa, picked in
+  the page bar with ping and players per server (saved; the first time the lowest ping wins). Each has
+  3 public rooms (`SPUB1`…`EPUB3`); private room codes start with the server letter. Needs
+  multihero-server with regions (`/where`); with an older server the lobby falls back to one
+  "Server 1" with PUBLIC1–3.
 - Ping in the room list is measured to the room itself (WebSocket), not with an HTTP request.
 - Players that have not sent their name yet are not shown in a room.
 - New screenshots (menu, character select, online lobby and room, gameplay, phone).

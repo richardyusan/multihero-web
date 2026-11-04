@@ -31,6 +31,8 @@
   #netbar b { color: #ffd34d; letter-spacing: 2px; font-size: 15px; }
   #netbar button { font: 13px system-ui, sans-serif; background: #2a2a48; color: #eee; border: 1px solid #55557a;
     border-radius: 4px; padding: 4px 9px; cursor: pointer; }
+  #netbar select { font: 13px system-ui, sans-serif; background: #2a2a48; color: #eee; border: 1px solid #55557a;
+    border-radius: 4px; padding: 3px 4px; max-width: 46vw; }
   #netbar button.go { background: #e8b400; color: #000; border-color: #e8b400; font-weight: 700; }
   .invite { color: #ffd34d; font-size: 15px; }
   #rotate { position: fixed; inset: 0; z-index: 3; background: #000; display: none; align-items: center;
@@ -44,6 +46,7 @@
 <div id="netbar" class="hidden">
   <span id="nb-room" class="hidden">Room <b id="nb-code-text"></b></span>
   <button id="nb-copy" class="go hidden">📋 Copy invite link</button>
+  <select id="nb-server" class="hidden" title="Online server"></select>
   <button id="nb-join" class="go hidden">⌨ Join with code</button>
   <button id="nb-name">👤 <span id="nb-name-text"></span></button>
 </div>
@@ -166,8 +169,19 @@ function setMuted(m) {
 // code, copying the invite link (index.html?room=CODE) and changing the player name.
 function netQ() { return Module.mhNet || (Module.mhNet = { q: [], uq: [] }); }
 var netCode = '', netName = '';
-Module.mhNetUi = function (mode, code, name) {
+Module.mhNetUi = function (mode, code, name, servers, cur) {
   netCode = code; netName = name;
+  var sel = $('nb-server'), list = (servers || '').split('\n').filter(function (l) { return l; });
+  sel.classList.toggle('hidden', mode !== 1 || !list.length);
+  if (list.length) {
+    while (sel.options.length > list.length) sel.remove(sel.options.length - 1);
+    list.forEach(function (l, i) {
+      var f = l.split('\t'), ping = +f[1], on = +f[2];
+      var t = '🌐 ' + f[0] + (ping >= 0 ? ' · ' + ping + ' ms' : ' · …') + (on >= 0 ? ' · ' + on + ' online' : '');
+      if (!sel.options[i]) sel.add(new Option(t, i)); else if (sel.options[i].text !== t) sel.options[i].text = t;
+    });
+    if (document.activeElement !== sel) sel.selectedIndex = cur;
+  }
   $('netbar').classList.toggle('hidden', mode === 0);
   $('nb-room').classList.toggle('hidden', mode !== 2);
   $('nb-copy').classList.toggle('hidden', mode !== 2);
@@ -182,6 +196,7 @@ Module.mhNetAskCode = function () {
 };
 function inviteLink(code) { return location.origin + location.pathname + '?room=' + code; }
 $('nb-join').onclick = function () { Module.mhNetAskCode(); };
+$('nb-server').onchange = function () { netQ().uq.push('V\t' + this.value); this.blur(); canvas.focus(); };
 $('nb-name').onclick = function () {
   var n = prompt('Your name in online rooms (max 16 characters):', netName);
   if (n && n.trim()) netQ().uq.push('N\t' + n.replace(/[\t\r\n]/g, ' ').trim().slice(0, 16));

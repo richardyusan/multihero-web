@@ -33,8 +33,8 @@ see [CHANGELOG.md](CHANGELOG.md).
   **gamepads** (Gamepad API) and **on-screen touch controls** on phones and tablets.
 - Sound through Web Audio (24 channels, 44.1 kHz).
 - Settings (`game.cfg`, `keys.cfg`) are saved in the browser (IndexedDB).
-- **Online multiplayer** for up to 4 players: 4 public rooms with players, host and ping in the
-  room list, **players online** count, private rooms with a code and an invite link, player names,
+- **Online multiplayer** for up to 4 players on **4 servers** (Asia Tenggara, Asia Timur, US, Eropa):
+  public rooms with players, host and ping in the room list, **players online** count, private rooms with a code and an invite link, player names,
   character / stage / lives choice, ping and READY in the room (see [below](#online-multiplayer)).
 - Full-screen button; phones go full screen in landscape when you press Play.
 - About 2 MB of code + 11 MB of game data (LZ4-compressed, 25 MB unpacked).
@@ -50,16 +50,27 @@ with a local web server (see [Play](#play) below).
 
 ## Online multiplayer
 
-1. **▶ Play** → **MULTIPLAYER ONLINE**. The room list shows **PUBLIC ROOM 1–4** with players,
-   host and ping, and how many players are online. Click a public room twice (or JOIN ROOM) to play
-   with whoever is there.
+1. **▶ Play** → **MULTIPLAYER ONLINE**. Pick a server in the bar at the top of the page
+   (🌐 *Server 1 – Asia Tenggara · 45 ms · 3 online*; the first time the one with the lowest ping is
+   chosen). The room list shows its **PUBLIC ROOM 1–3** with players, host and ping, and how many
+   players are online. Click a public room twice (or JOIN ROOM) to play with whoever is there.
 2. For a private game press **CREATE ROOM**: the room gets a code, e.g. `KX4P7`. **📋 Copy invite link**
    (bar at the top of the page) and send it to your friends; they open the link, press Play and
    MULTIPLAYER ONLINE and are in your room. Or they press **⌨ Join with code**.
 3. Pick your character, everybody presses **READY**, the host picks stage + lives and presses **START**.
 4. After the match everybody is back in the same room for the next round.
 
-Up to 4 players per room. The server is shown as **Server 1** in the lobby. Rooms are served by a Cloudflare Worker
+Up to 4 players per room. Servers:
+
+| Server | Region | Room codes start with |
+|---|---|---|
+| Server 1 | Asia Tenggara (`apac-se`) | `S` |
+| Server 2 | Asia Timur (`apac-ne`) | `N` |
+| Server 3 | US (`enam`) | `U` |
+| Server 4 | Eropa (`weur`) | `E` |
+
+All four are the same Cloudflare Worker; each room is created in its server's region, so invite
+links and codes always lead to the right server. Rooms are served by a Cloudflare Worker
 ([richardyusan/multihero-server](https://github.com/richardyusan/multihero-server)); every browser runs
 the game itself and only the players' buttons travel over the network (lockstep), so all players see
 the same fight. Details, protocol and limits: [docs/ONLINE.md](docs/ONLINE.md).

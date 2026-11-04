@@ -22,8 +22,14 @@
 // message per frame (54/s), so game messages are queued and sent together every 40 ms through
 // a token bucket that stays under the limit.
 //
-// Rooms: four public rooms with fixed codes (PUBLIC1-4) are always in the room list; CREATE ROOM
-// makes a private room with a random code ("enter room code" + recent rooms in the list, the page
+// Servers: the Worker places every room in a region chosen by the first letter of its code
+// (multihero-server/src/regions.js): S = Server 1 Asia Tenggara, N = Server 2 Asia Timur,
+// U = Server 3 US, E = Server 4 Eropa. The lobby shows one server at a time (picker in the page
+// bar, with ping and players per server; the choice is saved, the first time the lowest ping wins).
+// A server without regions (no GET /where) gets the old single "Server 1" with PUBLIC1-3.
+//
+// Rooms: three public rooms per server ("SPUB1".."SPUB3" etc.) are always in the room list; CREATE ROOM
+// makes a private room with a random code on the chosen server ("enter room code" + recent rooms in the list, the page
 // shows the code with a "copy invite link" button, index.html?room=CODE joins it directly).
 //
 // Public room list / online count without help from the server: while the room list is shown,
@@ -134,8 +140,16 @@ EM_JS(int, js_url_room, (char *buf, int cap), {
   return m[1].length;
 });
 // bar on the web page: 0 = hidden, 1 = room list, 2 = in a room (code + invite link)
-EM_JS(void, js_net_ui, (int mode, const char *code, const char *name), {
-  if (Module.mhNetUi) Module.mhNetUi(mode, UTF8ToString(code), UTF8ToString(name));
+EM_JS(void, js_net_ui, (int mode, const char *code, const char *name, const char *servers, int cur), {
+  if (Module.mhNetUi) Module.mhNetUi(mode, UTF8ToString(code), UTF8ToString(name), UTF8ToString(servers), cur);
+});
+// does the server place rooms by region? (GET /where/<code> answers JSON) -> "Z 1" / "Z 0"
+EM_JS(void, js_check_regions, (const char *url), {
+  var N = Module.mhNet || (Module.mhNet = {q: [], uq: []});
+  if (typeof fetch !== 'function') { N.uq.push('Z\t0'); return; }
+  fetch(UTF8ToString(url), {cache: 'no-store'}).then(function (r) { return r.json(); }).then(function (j) {
+    N.uq.push('Z\t' + (j && j.code ? 1 : 0));
+  }).catch(function () { N.uq.push('Z\t0'); });
 });
 EM_JS(void, js_net_ask_code, (), { if (Module.mhNetAskCode) Module.mhNetAskCode(); });
 // look into a public room for a moment: result "Q CODE ok players host ready ping" / "Q CODE fail"
@@ -199,13 +213,20 @@ const double TOKENS_PER_MS = 25.0 / 1000.0;
 const double TOKENS_MAX = 20;
 const size_t PACKET_MAX = 480;         // server limit is 512 characters
 const int64_t START_TIMEOUT_MS = 12000;
-const char *PUBLIC_CODES[] = {"PUBLIC1", "PUBLIC2", "PUBLIC3", "PUBLIC4"};
-const int PUBLIC_N = 4;
+struct ServerInfo { char letter; const char *shortName; const char *longName; };
+const ServerInfo SERVERS[] = {
+  {'S', "Server 1 Asia SE", "Server 1 - Asia Tenggara"},
+  {'N', "Server 2 Asia NE", "Server 2 - Asia Timur"},
+  {'U', "Server 3 US", "Server 3 - US"},
+  {'E', "Server 4 Europe", "Server 4 - Eropa"},
+};
+const int SERVER_N = 4;
+const int PUB_N = 3;                    // public rooms per server
 const int PROBE_WAIT_MS = 900;          // how long a probe waits for the players' names
-const int64_t PROBE_EVERY_MS = 2500;    // one public room after the other: each one every 10 s
+const int64_t PROBE_EVERY_MS = 2500;    // the shown server's rooms every ~10 s, the others slower
 
-int public_index(const std::string &code) {
-  for (int i = 0; i < PUBLIC_N; i++) if (code == PUBLIC_CODES[i]) return i;
+int server_of_code(const std::string &code) {
+  for (int i = 0; i < SERVER_N; i++) if (!code.empty() && code[0] == SERVERS[i].letter) return i;
   return -1;
 }
 
@@ -249,7 +270,11 @@ std::string clean_code(const std::string &in) {
 class NetWorker : public NetBackend {
  public:
   ~NetWorker() override { disconnect(); }
-  const char *name() const override { return "Server 1"; }
+  const char *name() const override {
+    if (regions_ != 1) return "Server 1";
+    int s = inRoom() || state == NET_CONNECTING ? server_of_code(roomId) : cur_;
+    return s >= 0 ? SERVERS[s].shortName : "private server";
+  }
   bool supportsHeroes() const override { return true; }
 
   void connect() override {
@@ -271,7 +296,9 @@ class NetWorker : public NetBackend {
     onlineCount = -1;              // known after the public rooms were probed
     probeBusy_ = false;
     nextProbe_ = 0;
-    sweep_ = PUBLIC_N;             // look into every public room right away
+    loadServerChoice();
+    if (regions_ < 0) js_check_regions((httpBase_ + "/where/SPUB1").c_str());
+    else startSweep(true);
     lastError.clear();
     loadRecent();
     buildRooms();
@@ -327,10 +354,11 @@ class NetWorker : public NetBackend {
       js_http_ping((httpBase_ + "/").c_str());
       nextHttpPing_ = now + (httpPings_ == 0 ? 700 : 4000);
     }
-    if (state == NET_ONLINE && !probeBusy_ && now >= nextProbe_) {
-      const char *c = PUBLIC_CODES[probeIdx_];
-      probeIdx_ = (probeIdx_ + 1) % PUBLIC_N;
-      js_probe((wsBase_ + "/room/" + c).c_str(), c, PROBE_WAIT_MS);
+    // probe public rooms only once we know whether the server has regions: a room is placed
+    // where it is first opened, a probe of "UPUB1" on an old server would pin it near us
+    if (state == NET_ONLINE && regions_ >= 0 && !probeBusy_ && now >= nextProbe_) {
+      std::string c = nextProbeCode();
+      js_probe((wsBase_ + "/room/" + c).c_str(), c.c_str(), PROBE_WAIT_MS);
       probeBusy_ = true;
       probeStarted_ = now;
     }
@@ -357,14 +385,13 @@ class NetWorker : public NetBackend {
     loadRecent();
     buildRooms();
     nextHttpPing_ = 0;
-    sweep_ = PUBLIC_N;
-    nextProbe_ = 0;
+    if (regions_ >= 0) startSweep(false);
   }
 
   void createRoom(const std::string &, int) override {
     if (state != NET_ONLINE) return;
-    std::string c;
-    for (int i = 0; i < 5; i++) c += CODE_CHARS[rng_() % strlen(CODE_CHARS)];
+    std::string c(1, SERVERS[regions_ == 1 ? cur_ : 0].letter);   // first letter = server (region)
+    for (int i = 0; i < 4; i++) c += CODE_CHARS[rng_() % strlen(CODE_CHARS)];
     open(c);
   }
 
@@ -435,12 +462,18 @@ class NetWorker : public NetBackend {
   // sockets in my room that did not say "hi" yet (players still loading, or probes): not shown
   std::map<std::string, int> pending_;
   struct PubRoom { int players = -1, ready = 0, ping = -1; bool open = true; std::string host; };
-  PubRoom pub_[PUBLIC_N];
+  PubRoom pub_[SERVER_N][PUB_N];
+  int regions_ = -1;                  // -1 checking, 0 old server (one region), 1 four servers
+  int cur_ = 0;                       // server shown in the lobby
+  bool chosen_ = false, autoPicked_ = false;
+  int srvPing_[SERVER_N] = {-1, -1, -1, -1};
+  std::vector<std::string> sweepList_;   // probe these first (lobby opened, refresh, server changed)
+  int probeK_ = 0, otherK_ = 0;
   bool probeBusy_ = false;
-  int probeIdx_ = 0, sweep_ = 0;
   int64_t nextProbe_ = 0, probeStarted_ = 0;
   bool wsPinged_ = false;             // a probe measured the ping: better than the HTTP one
-  std::string uiCode_, uiName_;
+  std::string uiCode_, uiName_, uiServers_;
+  int uiCur_ = -1;
 
   // ---------------------------------------------------------------- rooms / page
   void loadRecent() {
@@ -455,7 +488,7 @@ class NetWorker : public NetBackend {
     bb_closefile(f);
   }
   void saveRecent(const std::string &code, const std::string &host) {
-    if (public_index(code) >= 0) return;          // always in the list anyway
+    if (isPublic(code)) return;                   // always in the list anyway
     loadRecent();
     recent_.erase(std::remove_if(recent_.begin(), recent_.end(),
                                  [&](const std::pair<std::string, std::string> &r) { return r.first == code; }),
@@ -470,20 +503,22 @@ class NetWorker : public NetBackend {
   void buildRooms() {
     rooms.clear();
     int online = -1;
-    for (int i = 0; i < PUBLIC_N; i++) {
-      const PubRoom &pr = pub_[i];
+    for (int i = 0; i < PUB_N; i++) {
+      const PubRoom &pr = pub_[cur_][i];
       NetRoom n;
-      n.id = PUBLIC_CODES[i];
+      n.id = publicCode(cur_, i);
       n.name = "public room " + std::to_string(i + 1);
       n.maxPlayers = pr.players >= 0 ? 4 : 0;   // 0 = not known yet (not shown)
       n.players = pr.players < 0 ? 0 : pr.players;
-      n.open = pr.open && n.players < 4;
+      n.open = pr.open && n.players < 4 && regions_ >= 0;
       n.host = pr.players < 0 ? "checking..." : !pr.open ? (pr.players < 4 ? "playing" : pr.host)
                : pr.players == 0 ? "empty" : pr.host;
-      n.ping = pr.ping >= 0 ? pr.ping : ping;
+      n.ping = pr.ping >= 0 ? pr.ping : srvPing_[cur_];
       rooms.push_back(n);
-      if (pr.players >= 0) online = (online < 0 ? 0 : online) + pr.players;
     }
+    for (int s2 = 0; s2 < servers(); s2++)
+      for (int i = 0; i < PUB_N; i++)
+        if (pub_[s2][i].players >= 0) online = (online < 0 ? 0 : online) + pub_[s2][i].players;
     if (!inRoom()) onlineCount = online;
     NetRoom ask;
     ask.id = "?";
@@ -502,9 +537,76 @@ class NetWorker : public NetBackend {
   }
   void ui(int mode) {
     std::string code = mode == 2 ? roomId : std::string();
-    if (mode == uiMode_ && code == uiCode_ && playerName == uiName_) return;
-    uiMode_ = mode; uiCode_ = code; uiName_ = playerName;
-    js_net_ui(mode, code.c_str(), playerName.c_str());
+    std::string srv;                  // "name<TAB>ping<TAB>players" per server, one per line
+    if (regions_ == 1)
+      for (int i = 0; i < SERVER_N; i++) {
+        int on = -1;
+        for (int k = 0; k < PUB_N; k++) if (pub_[i][k].players >= 0) on = (on < 0 ? 0 : on) + pub_[i][k].players;
+        srv += std::string(SERVERS[i].longName) + "\t" + std::to_string(srvPing_[i]) + "\t" + std::to_string(on) + "\n";
+      }
+    if (mode == uiMode_ && code == uiCode_ && playerName == uiName_ && srv == uiServers_ && cur_ == uiCur_) return;
+    uiMode_ = mode; uiCode_ = code; uiName_ = playerName; uiServers_ = srv; uiCur_ = cur_;
+    js_net_ui(mode, code.c_str(), playerName.c_str(), srv.c_str(), cur_);
+  }
+
+  // ---------------------------------------------------------------- servers / public rooms
+  int servers() const { return regions_ == 1 ? SERVER_N : 1; }
+  std::string publicCode(int srv, int i) const {
+    if (regions_ != 1) return "PUBLIC" + std::to_string(i + 1);     // old server: as in 1.7.0
+    return std::string(1, SERVERS[srv].letter) + "PUB" + std::to_string(i + 1);
+  }
+  bool publicIndex(const std::string &code, int &srv, int &i) const {
+    for (srv = 0; srv < servers(); srv++)
+      for (i = 0; i < PUB_N; i++) if (code == publicCode(srv, i)) return true;
+    return false;
+  }
+  bool isPublic(const std::string &code) const { int a, b; return publicIndex(code, a, b); }
+  void loadServerChoice() {
+    int f = bb_readfile("online_server.txt");
+    if (!f) return;
+    std::string l = bb_readline(f);
+    bb_closefile(f);
+    int s = server_of_code(l);
+    if (s >= 0) { cur_ = s; chosen_ = true; }
+  }
+  void saveServerChoice() {
+    int f = bb_writefile("online_server.txt");
+    if (!f) return;
+    bb_writeline(f, std::string(1, SERVERS[cur_].letter));
+    bb_closefile(f);
+  }
+  // look into the rooms of the shown server first (all servers when the lobby opens)
+  void startSweep(bool all) {
+    sweepList_.clear();
+    for (int i = 0; i < PUB_N; i++) sweepList_.push_back(publicCode(cur_, i));
+    if (all)
+      for (int s2 = 0; s2 < servers(); s2++)
+        if (s2 != cur_) for (int i = 0; i < PUB_N; i++) sweepList_.push_back(publicCode(s2, i));
+    nextProbe_ = 0;
+  }
+  // after the sweep: 3 probes of the shown server, then 1 of another server, and so on
+  std::string nextProbeCode() {
+    if (!sweepList_.empty()) {
+      std::string c = sweepList_.front();
+      sweepList_.erase(sweepList_.begin());
+      return c;
+    }
+    int k = probeK_++ % 4;
+    if (k < 3 || servers() == 1) return publicCode(cur_, k % PUB_N);
+    int others = (servers() - 1) * PUB_N;
+    int o = otherK_++ % others;
+    int s2 = o / PUB_N;
+    if (s2 >= cur_) s2++;
+    return publicCode(s2, o % PUB_N);
+  }
+  void setServer(int s) {
+    if (regions_ != 1 || s < 0 || s >= SERVER_N || s == cur_) return;
+    cur_ = s;
+    chosen_ = true;
+    saveServerChoice();
+    if (srvPing_[cur_] >= 0) ping = srvPing_[cur_];
+    startSweep(false);
+    buildRooms();
   }
   void pollPage(int64_t now) {
     char buf[256];
@@ -528,21 +630,35 @@ class NetWorker : public NetBackend {
         }
       } else if (f[0] == "Q" && f.size() > 2) {    // public room probe
         probeBusy_ = false;
-        nextProbe_ = now + (sweep_ > 0 ? 300 : PROBE_EVERY_MS);
-        if (sweep_ > 0) sweep_--;
-        int i = public_index(f[1]);
-        if (i >= 0 && f[2] == "ok") {
-          pub_[i].players = f.size() > 3 ? atoi(f[3].c_str()) : 0;
-          pub_[i].host = f.size() > 4 ? f[4] : std::string();
-          pub_[i].ready = f.size() > 5 ? atoi(f[5].c_str()) : 0;
-          pub_[i].open = true;
-          int rt = f.size() > 6 ? atoi(f[6].c_str()) : -1;
-          if (rt >= 0) { pub_[i].ping = rt; ping = rt; wsPinged_ = true; }   // WebSocket ping to the room
-        } else if (i >= 0 && f[2] == "fail") {
-          pub_[i].open = false;                  // full or a match is running (count kept)
-          if (pub_[i].players < 0) pub_[i].players = 0;
+        nextProbe_ = now + (!sweepList_.empty() ? 300 : PROBE_EVERY_MS);
+        int sv, i;
+        if (publicIndex(f[1], sv, i)) {
+          PubRoom &pr = pub_[sv][i];
+          if (f[2] == "ok") {
+            pr.players = f.size() > 3 ? atoi(f[3].c_str()) : 0;
+            pr.host = f.size() > 4 ? f[4] : std::string();
+            pr.ready = f.size() > 5 ? atoi(f[5].c_str()) : 0;
+            pr.open = true;
+            int rt = f.size() > 6 ? atoi(f[6].c_str()) : -1;
+            if (rt >= 0) {                       // WebSocket ping to that room = to that server
+              pr.ping = rt;
+              srvPing_[sv] = rt;
+              if (sv == cur_) { ping = rt; wsPinged_ = true; }
+            }
+          } else if (f[2] == "fail") {
+            pr.open = false;                     // full or a match is running (count kept)
+            if (pr.players < 0) pr.players = 0;
+          }
+          autoPick();
         }
         if (state == NET_ONLINE) buildRooms();
+      } else if (f[0] == "Z" && f.size() > 1) {    // server with / without regions
+        regions_ = f[1] == "1" ? 1 : 0;
+        if (regions_ == 0) cur_ = 0;
+        startSweep(true);
+        if (state == NET_ONLINE) buildRooms();
+      } else if (f[0] == "V" && f.size() > 1) {    // server picked on the page
+        if (state == NET_ONLINE) setServer(atoi(f[1].c_str()));
       } else if (f[0] == "T" && f.size() > 1) {    // HTTP round trip
         int p = atoi(f[1].c_str());
         // the first request also opens the TLS connection: it is much slower, skip it
@@ -555,8 +671,8 @@ class NetWorker : public NetBackend {
   void open(const std::string &code) {
     resetRoom();
     roomId = code;
-    int pi = public_index(code);
-    roomName = pi >= 0 ? "public room " + std::to_string(pi + 1) : "room " + code;
+    int sv, pi;
+    roomName = publicIndex(code, sv, pi) ? "public room " + std::to_string(pi + 1) : "room " + code;
     js_ws_open((wsBase_ + "/room/" + code).c_str());
     sock_ = true;
     joining_ = true;
@@ -612,6 +728,17 @@ class NetWorker : public NetBackend {
     for (auto &m : members) m.host = m.id == hostId_;
     onlineCount = (int)members.size();
     if (!wasHost && isHost() && state == NET_IN_ROOM && sock_) sendRoom();   // I became the host
+  }
+  // first visit (no saved choice): show the server with the lowest ping once all were measured
+  void autoPick() {
+    if (chosen_ || autoPicked_ || regions_ != 1) return;
+    int best = -1;
+    for (int i = 0; i < SERVER_N; i++) {
+      if (srvPing_[i] < 0) return;
+      if (best < 0 || srvPing_[i] < srvPing_[best]) best = i;
+    }
+    autoPicked_ = true;
+    if (best != cur_) { cur_ = best; ping = srvPing_[cur_]; startSweep(false); }
   }
   // ping shown for another player: round trip through the relay (their ping + mine), which
   // is also what NetPlayDelay() needs to choose the input delay

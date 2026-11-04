@@ -7,6 +7,28 @@ the game itself runs in every browser.
 Server: `https://multihero-server.multihero-web.workers.dev` (set in [`config/online.cfg`](../config/online.cfg)),
 shown as **Server 1** in the lobby.
 
+## Servers
+
+| Lobby | Region (`locationHint`) | Public rooms | Private codes |
+|---|---|---|---|
+| Server 1 – Asia Tenggara | `apac-se` | `SPUB1`–`SPUB3` | `S…` |
+| Server 2 – Asia Timur | `apac-ne` | `NPUB1`–`NPUB3` | `N…` |
+| Server 3 – US | `enam` | `UPUB1`–`UPUB3` | `U…` |
+| Server 4 – Eropa | `weur` | `EPUB1`–`EPUB3` | `E…` |
+
+It is one Worker: a Durable Object (room) is created near the first player who opens it and never
+moves, so the Worker gives each new room the region of the first letter of its code
+(`multihero-server/src/regions.js`). The ping of a room therefore depends on its server, not on who
+created it. `GET <server>/where/<CODE>` shows the data center (`colo`) a room runs in.
+
+The page bar has a server picker (ping and players online per server, from the probes below). The
+choice is saved in the browser; on the first visit the server with the lowest ping is chosen.
+
+Before using the four servers the client checks `GET /where/SPUB1`. An older server without regions
+does not answer it, and then the lobby shows a single "Server 1" with `PUBLIC1`–`PUBLIC3` – it never
+opens the regional rooms there, because a room opened on such a server would be pinned near the
+first player for good.
+
 ## How to play with friends
 
 1. Press **▶ Play**, then **MULTIPLAYER ONLINE** in the main menu. The room list shows
@@ -68,8 +90,9 @@ browser A ──┐                                         ┌── browser B
 ## Public rooms without a room list on the server
 
 The Worker only knows room codes, so the client finds out what happens in the public rooms itself.
-While the room list is on screen it **probes** one public room every ~2.5 s (each room every ~10 s,
-REFRESH probes all four at once):
+While the room list is on screen it **probes** one public room every ~2.5 s: three probes for the shown
+server, then one for another server (shown server's rooms every ~10 s, the other servers more slowly;
+all 12 rooms right after the lobby opens, REFRESH probes the shown server again):
 
 1. open `wss://<server>/room/PUBLIC<n>` – the `welcome` lists the sockets in the room;
 2. send `{t:"ready"}` and `"ping"`;
