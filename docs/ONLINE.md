@@ -126,4 +126,4 @@ both players returning to the same room after the match. Not tested yet: real ph
   side is `buildRooms()` / the `Q` probe results in `net_worker.cpp`.
 - A browser tab in the background is slowed down by the browser; the others then wait for it and,
   after 15 s without data, the CPU takes over that player.
-- Web and Android players cannot play together (different server and protocol).
+- Browser, Android (1.8.0+) and PC players (MultiHero Online 1.8.0+) use the same rooms and play together.

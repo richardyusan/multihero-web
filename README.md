@@ -216,7 +216,7 @@ More detail: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (transpiler and runtim
 
 - The level editor (`Editor.bb`) is not ported.
 - "Players online" counts the players in the public rooms; players in private (code) rooms cannot
-  be counted by the current server. Web and Android players cannot play together.
+  be counted by the current server. Browser, Android (1.8.0+) and PC (MultiHero Online 1.8.0+) players play together.
 - On iPhone/iPad, full screen and screen-rotation lock depend on Safari's support.
 - Tested in Chromium (desktop and phone-sized touch layout). Please report problems in other
   browsers in the Issues.

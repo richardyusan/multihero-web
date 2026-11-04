@@ -11,7 +11,8 @@
     font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; touch-action: none;
     -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; background: #000; outline: none; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; background: #000; outline: none;
+    cursor: none; /* the game draws its own pointer */ }
   .panel { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 14px; background: #000; text-align: center; padding: 16px; z-index: 2; }
   .panel h1 { margin: 0; font-size: 34px; letter-spacing: 2px; color: #fff; }
@@ -63,7 +64,7 @@
   <div class="small">Keyboard: W A S D move · N attack · M jump · H special · Space block · J throw · Enter OK · Esc menu.
     Gamepads work too. On a phone, turn it sideways and use the on-screen buttons.</div>
   <div id="invite" class="invite hidden"></div>
-  <div class="small">MultiHero 0.96 by mhman · web port 1.7.0 (same version as the Android port)</div>
+  <div class="small">MultiHero 0.96 by mhman · web port 1.7.1 · plays together with Android and PC 1.8.0</div>
 </div>
 
 <div id="ended" class="panel hidden">

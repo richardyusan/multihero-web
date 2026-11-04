@@ -3,6 +3,11 @@
 The web version now uses the same version number as the
 [Android port](https://github.com/richardyusan/multihero-android) (1.7.0).
 
+## 1.7.1 – 2026-11-04
+- Fixed: the system mouse cursor was shown over the game next to the game's own pointer (two cursors).
+- The same online rooms are now also used by MultiHero Android 1.8.0 and MultiHero Online (Windows / Linux) 1.8.0:
+  browser, phone and PC players play together (tested: browser vs. native Linux build, same match, no desync).
+
 ## 1.7.0 – 2026-11-04
 - **Public rooms**: PUBLIC ROOM 1-4 are always in the room list with players (x/4), host name,
   ping and "playing" while a match runs; **Online** shows how many players are in the public rooms.
