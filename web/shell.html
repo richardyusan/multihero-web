@@ -198,6 +198,8 @@ Module.mhNetAskCode = function () {
 function inviteLink(code) { return location.origin + location.pathname + '?room=' + code; }
 $('nb-join').onclick = function () { Module.mhNetAskCode(); };
 $('nb-server').onchange = function () { netQ().uq.push('V\t' + this.value); this.blur(); canvas.focus(); };
+// opening the picker counts as choosing the shown server (no automatic switch to the lowest ping)
+$('nb-server').onfocus = function () { netQ().uq.push('V\t' + this.value); };
 $('nb-name').onclick = function () {
   var n = prompt('Your name in online rooms (max 16 characters):', netName);
   if (n && n.trim()) netQ().uq.push('N\t' + n.replace(/[\t\r\n]/g, ' ').trim().slice(0, 16));

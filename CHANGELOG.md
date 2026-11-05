@@ -3,6 +3,11 @@
 The web version now uses the same version number as the
 [Android port](https://github.com/richardyusan/multihero-android) (1.7.0).
 
+## Unreleased
+- Server picker: opening it keeps the shown server as your choice (no automatic switch to the lowest ping).
+- New screenshots: menu, character select, gameplay, phone, online lobby with the server picker, online room and
+  match (web vs an Android player).
+
 ## 1.7.1 – 2026-11-04
 - Fixed: the system mouse cursor was shown over the game next to the game's own pointer (two cursors).
 - The same online rooms are now also used by MultiHero Android 1.8.0 and MultiHero Online (Windows / Linux) 1.8.0:
